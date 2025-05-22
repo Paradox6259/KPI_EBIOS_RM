@@ -7,7 +7,7 @@
     body { font-family: Arial, sans-serif; background: #f8f8f8; }
     #container { width: 700px; margin: 30px auto; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px #ddd; padding: 30px; }
     canvas { background: #fff; display: block; margin: 0 auto; border-radius: 50%; }
-    #legend, #edit-table, #category-manager { width: 700px; margin: 20px auto; }
+    #legend, #edit-table, #category-manager, #risk-zone-manager { width: 700px; margin: 20px auto; }
     table.legend-table, table.edit-table {
       width: 100%;
       border-collapse: collapse;
@@ -77,22 +77,38 @@
     .cat-manager-row input[type="color"] { width: 30px; }
     .cat-manager-row .btn-small { margin-left: 8px; }
     .add-row-btn { margin-top: 7px; }
+    #risk-zone-manager table td input[type="number"] { width: 80px; }
   </style>
 </head>
 <body>
 <div id="container">
+
+  <!-- Contrôle d'échelle -->
+  <div style="text-align:center; margin-bottom:15px;">
+    <label for="scaleRange">Échelle : </label>
+    <input type="range" id="scaleRange" min="0.5" max="2" step="0.05" value="1" style="width:200px;">
+    <span id="scaleValue">1.00</span>x
+  </div>
+
   <canvas id="stakeholderMap" width="600" height="600"></canvas>
   <div id="legend"></div>
   <div id="category-manager"></div>
   <div id="edit-table"></div>
+  <div id="risk-zone-manager"></div>
 </div>
 <script>
 // --- Configuration initiale ---
-const radii = [60, 100, 140, 180, 220, 260]; // 6 cercles pour 5 à 0
+let riskZones = [
+  { label: "5", radius: 60, color: "#bbb", dashed: true },
+  { label: "4", radius: 100, color: "#bbb", dashed: true },
+  { label: "3", radius: 140, color: "#bbb", dashed: true },
+  { label: "2", radius: 180, color: "#f44336", dashed: false },
+  { label: "1", radius: 220, color: "#ff9800", dashed: false },
+  { label: "0", radius: 260, color: "#4caf50", dashed: false }
+];
+
 const menaceMin = 0.04;
 const menaceMax = 3.00;
-const radiusMin = radii[0];
-const radiusMax = radii[radii.length - 1];
 
 let categories = [
   { name: "Client", color: "#d9ead3" },
@@ -128,6 +144,8 @@ function getCategoryColor(cat) {
 
 // --- Calcul du rayon ---
 function menaceToRadius(menace) {
+  const radiusMin = Math.min(...riskZones.map(z => z.radius));
+  const radiusMax = Math.max(...riskZones.map(z => z.radius));
   const ratio = (menace - menaceMin) / (menaceMax - menaceMin);
   return radiusMin + (1 - ratio) * (radiusMax - radiusMin);
 }
@@ -141,20 +159,29 @@ function getPointRadius(menace) {
   return min + (max - min) * ((menace - menaceMin) / (menaceMax - menaceMin));
 }
 
+// --- GESTION DE L'ÉCHELLE ---
+let currentScale = 1.0;
+const scaleSlider = document.getElementById('scaleRange');
+const scaleValue = document.getElementById('scaleValue');
+scaleSlider.addEventListener('input', function() {
+  currentScale = parseFloat(this.value);
+  scaleValue.textContent = currentScale.toFixed(2);
+  drawMap();
+});
+
 // --- Dessin de la carte ---
 const canvas = document.getElementById('stakeholderMap');
 const ctx = canvas.getContext('2d');
 const center = { x: 300, y: 300 };
-const circleStyles = [
-  { color: "#bbb", dashed: true },   // 5 : pointillé
-  { color: "#bbb", dashed: true },   // 4 : pointillé
-  { color: "#bbb", dashed: true },   // 3 : pointillé
-  { color: "#f44336", dashed: false },   // 2 : rouge
-  { color: "#ff9800", dashed: false  },  // 1 :orange
-  { color: "#4caf50", dashed: false  }   // 0 : vert
-];
+
 function drawMap() {
   ctx.clearRect(0, 0, 600, 600);
+  ctx.save();
+  // Mise à l'échelle autour du centre
+  ctx.translate(center.x, center.y);
+  ctx.scale(currentScale, currentScale);
+  ctx.translate(-center.x, -center.y);
+
   // Quadrants
   ctx.save();
   ctx.strokeStyle = '#ddd';
@@ -164,21 +191,23 @@ function drawMap() {
   ctx.moveTo(0, center.y); ctx.lineTo(600, center.y);
   ctx.stroke();
   ctx.restore();
-  // Cercles de proximité
-  for (let i = 0; i < radii.length; i++) {
+
+  // Cercles de proximité (zones de risque dynamiques)
+  for (let i = 0; i < riskZones.length; i++) {
+    const zone = riskZones[i];
     ctx.save();
     ctx.beginPath();
-    ctx.arc(center.x, center.y, radii[i], 0, 2 * Math.PI);
-    ctx.strokeStyle = circleStyles[i].color;
+    ctx.arc(center.x, center.y, zone.radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = zone.color;
     ctx.lineWidth = 3;
-    if (circleStyles[i].dashed) ctx.setLineDash([8, 8]);
+    if (zone.dashed) ctx.setLineDash([8, 8]);
     else ctx.setLineDash([]);
     ctx.stroke();
     ctx.restore();
     ctx.save();
     ctx.font = "14px Arial";
     ctx.fillStyle = "#888";
-    ctx.fillText(radii.length - 1 - i, center.x + radii[i] + 5, center.y + 5);
+    ctx.fillText(zone.label, center.x + zone.radius + 5, center.y + 5);
     ctx.restore();
   }
   // Centre (objet de l’étude)
@@ -215,6 +244,8 @@ function drawMap() {
     ctx.fillText(s.label.substring(0,2), x, y);
     ctx.restore();
   });
+
+  ctx.restore(); // Fin de l'échelle
 }
 
 // --- Légende améliorée ---
@@ -318,6 +349,64 @@ window.removeCategory = function(idx) {
   drawLegend();
 };
 
+// --- Gestion des zones de risque dynamiques ---
+function drawRiskZoneManager() {
+  let html = `<h3>Zones de risque</h3>
+    <table class="edit-table">
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>Rayon</th>
+          <th>Couleur</th>
+          <th>Pointillé</th>
+        </tr>
+      </thead>
+      <tbody>`;
+  riskZones.forEach((zone, idx) => {
+    html += `
+      <tr>
+        <td><input type="text" value="${zone.label}" data-idx="${idx}" class="rz-label" /></td>
+        <td><input type="number" min="20" max="400" value="${zone.radius}" data-idx="${idx}" class="rz-radius" /></td>
+        <td><input type="color" value="${zone.color}" data-idx="${idx}" class="rz-color" /></td>
+        <td><input type="checkbox" ${zone.dashed ? "checked" : ""} data-idx="${idx}" class="rz-dashed" /></td>
+      </tr>
+    `;
+  });
+  html += `</tbody></table>`;
+  document.getElementById('risk-zone-manager').innerHTML = html;
+
+  // Gestion des modifications
+  document.querySelectorAll('.rz-label').forEach(input => {
+    input.addEventListener('change', function() {
+      riskZones[this.dataset.idx].label = this.value;
+      drawMap();
+      drawRiskZoneManager();
+    });
+  });
+  document.querySelectorAll('.rz-radius').forEach(input => {
+    input.addEventListener('change', function() {
+      riskZones[this.dataset.idx].radius = parseInt(this.value);
+      updateRadii();
+      drawMap();
+      drawRiskZoneManager();
+    });
+  });
+  document.querySelectorAll('.rz-color').forEach(input => {
+    input.addEventListener('input', function() {
+      riskZones[this.dataset.idx].color = this.value;
+      drawMap();
+      drawRiskZoneManager();
+    });
+  });
+  document.querySelectorAll('.rz-dashed').forEach(input => {
+    input.addEventListener('change', function() {
+      riskZones[this.dataset.idx].dashed = this.checked;
+      drawMap();
+      drawRiskZoneManager();
+    });
+  });
+}
+
 // --- Tableau d'édition ---
 function drawEditTable() {
   let editHTML = `
@@ -399,17 +488,23 @@ window.removeStakeholder = function(idx) {
 };
 
 // --- Initialisation ---
-updateRadii();
-drawMap();
-drawLegend();
-drawCategoryManager();
-drawEditTable();
+function init() {
+  updateRadii();
+  drawMap();
+  drawLegend();
+  drawCategoryManager();
+  drawEditTable();
+  drawRiskZoneManager();
+}
+init();
 
-// --- Drag & drop parties prenantes ---
+// --- Drag & drop parties prenantes adapté à l'échelle ---
 let dragging = null;
 canvas.addEventListener('mousedown', function(e) {
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  // Correction pour l'échelle
+  const mx = (e.clientX - rect.left - center.x) / currentScale + center.x;
+  const my = (e.clientY - rect.top  - center.y) / currentScale + center.y;
   stakeholders.forEach((s, i) => {
     const x = center.x + s.radius * Math.cos(s.angle);
     const y = center.y + s.radius * Math.sin(s.angle);
@@ -420,10 +515,15 @@ canvas.addEventListener('mousedown', function(e) {
 canvas.addEventListener('mousemove', function(e) {
   if (dragging !== null) {
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    // Correction pour l'échelle
+    const mx = (e.clientX - rect.left - center.x) / currentScale + center.x;
+    const my = (e.clientY - rect.top  - center.y) / currentScale + center.y;
     const dx = mx - center.x, dy = my - center.y;
     stakeholders[dragging].angle = Math.atan2(dy, dx);
     let r = Math.hypot(dx, dy);
+    // Rayon borné par les zones de risque
+    const radiusMin = Math.min(...riskZones.map(z => z.radius));
+    const radiusMax = Math.max(...riskZones.map(z => z.radius));
     r = Math.max(radiusMin, Math.min(radiusMax, r));
     stakeholders[dragging].radius = r;
     drawMap();
