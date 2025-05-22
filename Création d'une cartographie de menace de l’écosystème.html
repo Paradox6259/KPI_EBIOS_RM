@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Cartographie Parties Prenantes</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8f8f8; }
+    #container { width: 700px; margin: 30px auto; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px #ddd; padding: 30px; }
+    canvas { background: #fff; display: block; margin: 0 auto; border-radius: 50%; }
+    #legend, #edit-table, #category-manager { width: 700px; margin: 20px auto; }
+    table.legend-table, table.edit-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background: #f9f9f9;
+    }
+    table.legend-table th, table.legend-table td,
+    table.edit-table th, table.edit-table td {
+      border: 1px solid #ddd;
+      padding: 8px 10px;
+      font-size: 15px;
+    }
+    table.legend-table th, table.edit-table th {
+      background: #ececec;
+      font-weight: bold;
+      text-align: center;
+    }
+    table.legend-table td, table.edit-table td {
+      vertical-align: middle;
+    }
+    .color-dot {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+      border: 1px solid #aaa;
+    }
+    input[type="number"], input[type="text"], select {
+      width: 60px;
+      padding: 3px;
+      font-size: 15px;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      background: #fff;
+      text-align: left;
+    }
+    input[type="number"]:focus, input[type="text"]:focus, select:focus {
+      outline: 2px solid #2196f3;
+      background: #e3f2fd;
+    }
+    input.cat-color {
+      width: 30px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      vertical-align: middle;
+    }
+    .btn {
+      background: #2196f3;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 18px;
+      font-size: 15px;
+      cursor: pointer;
+      margin: 3px 0;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #1769aa; }
+    .btn-danger { background: #e53935; }
+    .btn-danger:hover { background: #b71c1c; }
+    .btn-small { padding: 3px 9px; font-size: 13px; }
+    .cat-manager-row { margin-bottom: 10px; }
+    .cat-manager-row input[type="text"] { width: 120px; }
+    .cat-manager-row input[type="color"] { width: 30px; }
+    .cat-manager-row .btn-small { margin-left: 8px; }
+    .add-row-btn { margin-top: 7px; }
+  </style>
+</head>
+<body>
+<div id="container">
+  <canvas id="stakeholderMap" width="600" height="600"></canvas>
+  <div id="legend"></div>
+  <div id="category-manager"></div>
+  <div id="edit-table"></div>
+</div>
+<script>
+// --- Configuration initiale ---
+const radii = [60, 100, 140, 180, 220, 260]; // 6 cercles pour 5 à 0
+const menaceMin = 0.04;
+const menaceMax = 3.00;
+const radiusMin = radii[0];
+const radiusMax = radii[radii.length - 1];
+
+let categories = [
+  { name: "Client", color: "#d9ead3" },
+  { name: "Fournisseur", color: "#c9daf8" },
+  { name: "Prestataire", color: "#f4cccc" },
+  { name: "Partenaire", color: "#fce5cd" },
+  { name: "Interne", color: "#fff2cc" },
+  { name: "Régulateur", color: "#b4a7d6" }
+];
+
+// Tableau parties prenantes (exemple initial)
+let stakeholders = [
+  { category: "Client",      label: "C1 - Particuliers",         dep: 1, pen: 1, mat: 1, conf: 1, menace: 1.00, angle: -2.7 },
+  { category: "Client",      label: "C2 - Professionnels",       dep: 1, pen: 1, mat: 3, conf: 2, menace: 0.17, angle: -2.9 },
+  { category: "Fournisseur", label: "F1 - Hébergeur cloud",      dep: 5, pen: 5, mat: 4, conf: 4, menace: 1.56, angle: 2.9 },
+  { category: "Fournisseur", label: "F2 - Opérateur télécom",    dep: 5, pen: 3, mat: 4, conf: 4, menace: 0.94, angle: 2.7 },
+  { category: "Fournisseur", label: "F3 - Prestataire de sécurité", dep: 4, pen: 4, mat: 5, conf: 5, menace: 0.64, angle: 2.5 },
+  { category: "Prestataire", label: "P1 - Société de maintenance", dep: 2, pen: 2, mat: 2, conf: 2, menace: 1.00, angle: 0.7 },
+  { category: "Prestataire", label: "P2 - Consultant externe",    dep: 2, pen: 2, mat: 3, conf: 2, menace: 0.67, angle: 0.9 },
+  { category: "Partenaire",  label: "P3 - Banque partenaire",     dep: 4, pen: 4, mat: 4, conf: 3, menace: 0.75, angle: -0.7 },
+  { category: "Partenaire",  label: "P4 - Plateforme de paiement", dep: 4, pen: 4, mat: 4, conf: 4, menace: 1.00, angle: -0.5 },
+  { category: "Interne",     label: "I1 - Équipe IT",             dep: 4, pen: 5, mat: 5, conf: 1, menace: 0.20, angle: 1.5 },
+  { category: "Interne",     label: "I2 - Direction générale",    dep: 3, pen: 3, mat: 2, conf: 3, menace: 0.75, angle: 1.7 },
+  { category: "Interne",     label: "I3 - Utilisateurs métier",   dep: 4, pen: 3, mat: 2, conf: 3, menace: 3.00, angle: 1.9 },
+  { category: "Régulateur",  label: "R1 - ACPR",                  dep: 1, pen: 1, mat: 5, conf: 5, menace: 0.04, angle: 0.2 },
+  { category: "Régulateur",  label: "R2 - CNIL",                  dep: 1, pen: 1, mat: 5, conf: 5, menace: 0.04, angle: 0.4 }
+];
+
+function getCategoryColor(cat) {
+  let c = categories.find(x => x.name === cat);
+  return c ? c.color : "#ccc";
+}
+
+// --- Calcul du rayon ---
+function menaceToRadius(menace) {
+  const ratio = (menace - menaceMin) / (menaceMax - menaceMin);
+  return radiusMin + (1 - ratio) * (radiusMax - radiusMin);
+}
+function updateRadii() {
+  stakeholders.forEach(s => {
+    s.radius = menaceToRadius(s.menace);
+  });
+}
+function getPointRadius(menace) {
+  const min = 13, max = 32;
+  return min + (max - min) * ((menace - menaceMin) / (menaceMax - menaceMin));
+}
+
+// --- Dessin de la carte ---
+const canvas = document.getElementById('stakeholderMap');
+const ctx = canvas.getContext('2d');
+const center = { x: 300, y: 300 };
+const circleStyles = [
+  { color: "#bbb", dashed: true },   // 5 : pointillé
+  { color: "#bbb", dashed: true },   // 4 : pointillé
+  { color: "#bbb", dashed: true },   // 3 : pointillé
+  { color: "#f44336", dashed: false },   // 2 : rouge
+  { color: "#ff9800", dashed: false  },  // 1 :orange
+  { color: "#4caf50", dashed: false  }   // 0 : vert
+];
+function drawMap() {
+  ctx.clearRect(0, 0, 600, 600);
+  // Quadrants
+  ctx.save();
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(center.x, 0); ctx.lineTo(center.x, 600);
+  ctx.moveTo(0, center.y); ctx.lineTo(600, center.y);
+  ctx.stroke();
+  ctx.restore();
+  // Cercles de proximité
+  for (let i = 0; i < radii.length; i++) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radii[i], 0, 2 * Math.PI);
+    ctx.strokeStyle = circleStyles[i].color;
+    ctx.lineWidth = 3;
+    if (circleStyles[i].dashed) ctx.setLineDash([8, 8]);
+    else ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    ctx.font = "14px Arial";
+    ctx.fillStyle = "#888";
+    ctx.fillText(radii.length - 1 - i, center.x + radii[i] + 5, center.y + 5);
+    ctx.restore();
+  }
+  // Centre (objet de l’étude)
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, 15, 0, 2 * Math.PI);
+  ctx.fillStyle = "#2196f3";
+  ctx.fill();
+  ctx.font = "bold 16px Arial";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.restore();
+  // Parties prenantes
+  stakeholders.forEach((s, i) => {
+    const x = center.x + s.radius * Math.cos(s.angle);
+    const y = center.y + s.radius * Math.sin(s.angle);
+    const pointRadius = getPointRadius(s.menace);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, pointRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = getCategoryColor(s.category);
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    ctx.font = "bold 14px Arial";
+    ctx.fillStyle = "#222";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.label.substring(0,2), x, y);
+    ctx.restore();
+  });
+}
+
+// --- Légende améliorée ---
+function drawLegend() {
+  let legendHTML = `
+    <table class="legend-table" style="margin-top:20px;">
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Nom</th>
+          <th>Dépendance</th>
+          <th>Pénétration</th>
+          <th>Maturité SSI</th>
+          <th>Confiance</th>
+          <th>Niveau de menace</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  stakeholders.forEach(s => {
+    legendHTML += `
+      <tr>
+        <td><span class="color-dot" style="background:${getCategoryColor(s.category)}"></span>${s.category}</td>
+        <td>${s.label}</td>
+        <td style="text-align:center;">${s.dep}</td>
+        <td style="text-align:center;">${s.pen}</td>
+        <td style="text-align:center;">${s.mat}</td>
+        <td style="text-align:center;">${s.conf}</td>
+        <td style="text-align:center;"><b>${s.menace.toFixed(2)}</b></td>
+      </tr>
+    `;
+  });
+  legendHTML += `
+      </tbody>
+    </table>
+  `;
+  document.getElementById('legend').innerHTML = legendHTML;
+}
+
+// --- Gestion des catégories ---
+function drawCategoryManager() {
+  let html = `<h3>Catégories</h3>`;
+  categories.forEach((cat, idx) => {
+    html += `
+      <div class="cat-manager-row">
+        <input type="text" value="${cat.name}" data-idx="${idx}" class="cat-name" />
+        <input type="color" value="${cat.color}" data-idx="${idx}" class="cat-color" />
+        <button class="btn btn-small btn-danger" data-idx="${idx}" onclick="removeCategory(${idx})" ${categories.length<=1?'disabled':''}>Supprimer</button>
+      </div>
+    `;
+  });
+  html += `
+    <div class="cat-manager-row">
+      <input type="text" placeholder="Nouvelle catégorie" id="new-cat-name" />
+      <input type="color" value="#cccccc" id="new-cat-color" />
+      <button class="btn btn-small" onclick="addCategory()">Ajouter</button>
+    </div>
+    <hr style="margin:15px 0;">
+  `;
+  document.getElementById('category-manager').innerHTML = html;
+
+  // Listeners pour édition des catégories
+  document.querySelectorAll('.cat-name').forEach(input => {
+    input.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-idx'));
+      categories[idx].name = this.value;
+      drawEditTable();
+      drawLegend();
+    });
+  });
+  document.querySelectorAll('.cat-color').forEach(input => {
+    input.addEventListener('input', function() {
+      const idx = parseInt(this.getAttribute('data-idx'));
+      categories[idx].color = this.value;
+      drawMap();
+      drawLegend();
+      drawEditTable();
+    });
+  });
+}
+window.addCategory = function() {
+  let name = document.getElementById('new-cat-name').value.trim();
+  let color = document.getElementById('new-cat-color').value;
+  if(name && !categories.find(c=>c.name===name)) {
+    categories.push({name, color});
+    drawCategoryManager();
+    drawEditTable();
+    drawLegend();
+  }
+  document.getElementById('new-cat-name').value = '';
+};
+window.removeCategory = function(idx) {
+  let catName = categories[idx].name;
+  // Retirer la catégorie des parties prenantes
+  stakeholders.forEach(s => {
+    if(s.category === catName) s.category = categories[0].name;
+  });
+  categories.splice(idx,1);
+  drawCategoryManager();
+  drawEditTable();
+  drawLegend();
+};
+
+// --- Tableau d'édition ---
+function drawEditTable() {
+  let editHTML = `
+    <form id="edit-form">
+    <table class="edit-table">
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Nom</th>
+          <th>Dépendance</th>
+          <th>Pénétration</th>
+          <th>Maturité SSI</th>
+          <th>Confiance</th>
+          <th>Niveau de menace</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  stakeholders.forEach((s, idx) => {
+    editHTML += `
+      <tr>
+        <td>
+          <select name="cat-${idx}">
+            ${categories.map(cat => `<option value="${cat.name}" ${cat.name===s.category?'selected':''}>${cat.name}</option>`).join('')}
+          </select>
+        </td>
+        <td><input type="text" name="label-${idx}" value="${s.label}" /></td>
+        <td><input type="number" min="1" max="5" name="dep-${idx}" value="${s.dep}" /></td>
+        <td><input type="number" min="1" max="5" name="pen-${idx}" value="${s.pen}" /></td>
+        <td><input type="number" min="1" max="5" name="mat-${idx}" value="${s.mat}" /></td>
+        <td><input type="number" min="1" max="5" name="conf-${idx}" value="${s.conf}" /></td>
+        <td><input type="number" step="0.01" min="0" max="5" name="menace-${idx}" value="${s.menace}" /></td>
+        <td><button type="button" class="btn btn-small btn-danger" onclick="removeStakeholder(${idx})">Suppr.</button></td>
+      </tr>
+    `;
+  });
+  editHTML += `
+      </tbody>
+    </table>
+    <button type="button" class="btn add-row-btn" onclick="addStakeholder()">Ajouter une partie prenante</button>
+    <button type="submit" class="btn" style="float:right;">Valider</button>
+    </form>
+  `;
+  document.getElementById('edit-table').innerHTML = editHTML;
+
+  // Validation du formulaire
+  document.getElementById('edit-form').onsubmit = function(e) {
+    e.preventDefault();
+    let form = e.target;
+    stakeholders.forEach((s, idx) => {
+      s.category = form[`cat-${idx}`].value;
+      s.label = form[`label-${idx}`].value;
+      s.dep = parseInt(form[`dep-${idx}`].value) || 1;
+      s.pen = parseInt(form[`pen-${idx}`].value) || 1;
+      s.mat = parseInt(form[`mat-${idx}`].value) || 1;
+      s.conf = parseInt(form[`conf-${idx}`].value) || 1;
+      let menace = parseFloat(form[`menace-${idx}`].value.replace(',','.'));
+      s.menace = isNaN(menace) ? s.menace : Math.max(menaceMin, Math.min(menaceMax, menace));
+    });
+    updateRadii();
+    drawMap();
+    drawLegend();
+    drawEditTable();
+  };
+}
+window.addStakeholder = function() {
+  stakeholders.push({
+    category: categories[0].name,
+    label: "Nouvelle partie prenante",
+    dep: 1, pen: 1, mat: 1, conf: 1, menace: 1.00,
+    angle: Math.random()*2*Math.PI
+  });
+  drawEditTable();
+};
+window.removeStakeholder = function(idx) {
+  stakeholders.splice(idx,1);
+  drawEditTable();
+};
+
+// --- Initialisation ---
+updateRadii();
+drawMap();
+drawLegend();
+drawCategoryManager();
+drawEditTable();
+
+// --- Drag & drop parties prenantes ---
+let dragging = null;
+canvas.addEventListener('mousedown', function(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  stakeholders.forEach((s, i) => {
+    const x = center.x + s.radius * Math.cos(s.angle);
+    const y = center.y + s.radius * Math.sin(s.angle);
+    const pointRadius = getPointRadius(s.menace);
+    if (Math.hypot(mx - x, my - y) < pointRadius + 5) dragging = i;
+  });
+});
+canvas.addEventListener('mousemove', function(e) {
+  if (dragging !== null) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const dx = mx - center.x, dy = my - center.y;
+    stakeholders[dragging].angle = Math.atan2(dy, dx);
+    let r = Math.hypot(dx, dy);
+    r = Math.max(radiusMin, Math.min(radiusMax, r));
+    stakeholders[dragging].radius = r;
+    drawMap();
+    drawLegend();
+    drawEditTable();
+  }
+});
+canvas.addEventListener('mouseup', function() { dragging = null; });
+canvas.addEventListener('mouseleave', function() { dragging = null; });
+</script>
+</body>
+</html>
