@@ -78,24 +78,57 @@
     .cat-manager-row .btn-small { margin-left: 8px; }
     .add-row-btn { margin-top: 7px; }
     #risk-zone-manager table td input[type="number"] { width: 80px; }
+
+    .nav-tabs {
+    margin: 20px 0 10px 0;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #444;
+    border-bottom: 3px solid transparent;
+    transition: border-color 0.3s ease;
+  }
+  .tab-btn.active {
+    border-bottom: 3px solid #007bff;
+    color: #007bff;
+  }
+  .tab-content {
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 4px;
+  }
   </style>
 </head>
 <body>
 <div id="container">
 
-  <!-- Contrôle d'échelle -->
-  <div style="text-align:center; margin-bottom:15px;">
-    <label for="scaleRange">Échelle : </label>
-    <input type="range" id="scaleRange" min="0.5" max="2" step="0.05" value="1" style="width:200px;">
-    <span id="scaleValue">1.00</span>x
-  </div>
-
-  <canvas id="stakeholderMap" width="600" height="600"></canvas>
-  <div id="legend"></div>
-  <div id="category-manager"></div>
-  <div id="edit-table"></div>
-  <div id="risk-zone-manager"></div>
-</div>
+    <!-- Contrôle d'échelle -->
+    <div style="text-align:center; margin-bottom:15px;">
+        <label for="scaleRange">Échelle : </label>
+        <input type="range" id="scaleRange" min="0.5" max="2" step="0.05" value="1" style="width:200px;">
+        <span id="scaleValue">1.00</span>x
+    </div>  
+    <div style="margin-top: 1em;"></div>
+    
+    <canvas id="stakeholderMap" width="600" height="600"></canvas>
+    <div id="legend"></div>
+    
+    <!-- Nav Tabs -->
+    <div class="nav-tabs">
+        <button class="tab-btn active" data-tab="category-manager">Catégories</button>
+        <button class="tab-btn" data-tab="edit-table">Édition</button>
+        <button class="tab-btn" data-tab="risk-zone-manager">Zones de risque</button>
+    </div>
+    
+    <!-- Contenus des onglets -->
+    <div id="category-manager" class="tab-content"></div>
+    <div id="edit-table" class="tab-content" style="display:none;"></div>
+    <div id="risk-zone-manager" class="tab-content" style="display:none;"></div>    
+    </div>
 <script>
 // --- Configuration initiale ---
 let riskZones = [
@@ -107,8 +140,8 @@ let riskZones = [
   { label: "0", radius: 260, color: "#4caf50", dashed: false }
 ];
 
-const menaceMin = 0.04;
-const menaceMax = 3.00;
+const menaceMin = 0.0625;
+const menaceMax = 16.00;
 
 let categories = [
   { name: "Client", color: "#d9ead3" },
@@ -123,18 +156,18 @@ let categories = [
 let stakeholders = [
   { category: "Client",      label: "C1 - Particuliers",         dep: 1, pen: 1, mat: 1, conf: 1, menace: 1.00, angle: -2.7 },
   { category: "Client",      label: "C2 - Professionnels",       dep: 1, pen: 1, mat: 3, conf: 2, menace: 0.17, angle: -2.9 },
-  { category: "Fournisseur", label: "F1 - Hébergeur cloud",      dep: 5, pen: 5, mat: 4, conf: 4, menace: 1.56, angle: 2.9 },
-  { category: "Fournisseur", label: "F2 - Opérateur télécom",    dep: 5, pen: 3, mat: 4, conf: 4, menace: 0.94, angle: 2.7 },
-  { category: "Fournisseur", label: "F3 - Prestataire de sécurité", dep: 4, pen: 4, mat: 5, conf: 5, menace: 0.64, angle: 2.5 },
+  { category: "Fournisseur", label: "F1 - Hébergeur cloud",      dep: 4, pen: 4, mat: 4, conf: 4, menace: 1.56, angle: 2.9 },
+  { category: "Fournisseur", label: "F2 - Opérateur télécom",    dep: 4, pen: 3, mat: 4, conf: 4, menace: 0.94, angle: 2.7 },
+  { category: "Fournisseur", label: "F3 - Prestataire de sécurité", dep: 4, pen: 4, mat: 4, conf: 4, menace: 0.64, angle: 2.5 },
   { category: "Prestataire", label: "P1 - Société de maintenance", dep: 2, pen: 2, mat: 2, conf: 2, menace: 1.00, angle: 0.7 },
   { category: "Prestataire", label: "P2 - Consultant externe",    dep: 2, pen: 2, mat: 3, conf: 2, menace: 0.67, angle: 0.9 },
   { category: "Partenaire",  label: "P3 - Banque partenaire",     dep: 4, pen: 4, mat: 4, conf: 3, menace: 0.75, angle: -0.7 },
   { category: "Partenaire",  label: "P4 - Plateforme de paiement", dep: 4, pen: 4, mat: 4, conf: 4, menace: 1.00, angle: -0.5 },
-  { category: "Interne",     label: "I1 - Équipe IT",             dep: 4, pen: 5, mat: 5, conf: 1, menace: 0.20, angle: 1.5 },
+  { category: "Interne",     label: "I1 - Équipe IT",             dep: 4, pen: 4, mat: 4, conf: 1, menace: 0.20, angle: 1.5 },
   { category: "Interne",     label: "I2 - Direction générale",    dep: 3, pen: 3, mat: 2, conf: 3, menace: 0.75, angle: 1.7 },
   { category: "Interne",     label: "I3 - Utilisateurs métier",   dep: 4, pen: 3, mat: 2, conf: 3, menace: 3.00, angle: 1.9 },
-  { category: "Régulateur",  label: "R1 - ACPR",                  dep: 1, pen: 1, mat: 5, conf: 5, menace: 0.04, angle: 0.2 },
-  { category: "Régulateur",  label: "R2 - CNIL",                  dep: 1, pen: 1, mat: 5, conf: 5, menace: 0.04, angle: 0.4 }
+  { category: "Régulateur",  label: "R1 - ACPR",                  dep: 1, pen: 1, mat: 4, conf: 4, menace: 0.04, angle: 0.2 },
+  { category: "Régulateur",  label: "R2 - CNIL",                  dep: 1, pen: 1, mat: 4, conf: 4, menace: 0.04, angle: 0.4 }
 ];
 
 function getCategoryColor(cat) {
@@ -207,7 +240,7 @@ function drawMap() {
     ctx.save();
     ctx.font = "14px Arial";
     ctx.fillStyle = "#888";
-    ctx.fillText(zone.label, center.x + zone.radius + 5, center.y + 5);
+    ctx.fillText(zone.label, center.x + zone.radius + 4, center.y + 4);
     ctx.restore();
   }
   // Centre (objet de l’étude)
@@ -248,43 +281,6 @@ function drawMap() {
   ctx.restore(); // Fin de l'échelle
 }
 
-// --- Légende améliorée ---
-function drawLegend() {
-  let legendHTML = `
-    <table class="legend-table" style="margin-top:20px;">
-      <thead>
-        <tr>
-          <th>Catégorie</th>
-          <th>Nom</th>
-          <th>Dépendance</th>
-          <th>Pénétration</th>
-          <th>Maturité SSI</th>
-          <th>Confiance</th>
-          <th>Niveau de menace</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-  stakeholders.forEach(s => {
-    legendHTML += `
-      <tr>
-        <td><span class="color-dot" style="background:${getCategoryColor(s.category)}"></span>${s.category}</td>
-        <td>${s.label}</td>
-        <td style="text-align:center;">${s.dep}</td>
-        <td style="text-align:center;">${s.pen}</td>
-        <td style="text-align:center;">${s.mat}</td>
-        <td style="text-align:center;">${s.conf}</td>
-        <td style="text-align:center;"><b>${s.menace.toFixed(2)}</b></td>
-      </tr>
-    `;
-  });
-  legendHTML += `
-      </tbody>
-    </table>
-  `;
-  document.getElementById('legend').innerHTML = legendHTML;
-}
-
 // --- Gestion des catégories ---
 function drawCategoryManager() {
   let html = `<h3>Catégories</h3>`;
@@ -312,8 +308,6 @@ function drawCategoryManager() {
     input.addEventListener('change', function() {
       const idx = parseInt(this.getAttribute('data-idx'));
       categories[idx].name = this.value;
-      drawEditTable();
-      drawLegend();
     });
   });
   document.querySelectorAll('.cat-color').forEach(input => {
@@ -321,19 +315,16 @@ function drawCategoryManager() {
       const idx = parseInt(this.getAttribute('data-idx'));
       categories[idx].color = this.value;
       drawMap();
-      drawLegend();
-      drawEditTable();
     });
   });
 }
+
 window.addCategory = function() {
   let name = document.getElementById('new-cat-name').value.trim();
   let color = document.getElementById('new-cat-color').value;
   if(name && !categories.find(c=>c.name===name)) {
     categories.push({name, color});
     drawCategoryManager();
-    drawEditTable();
-    drawLegend();
   }
   document.getElementById('new-cat-name').value = '';
 };
@@ -345,9 +336,155 @@ window.removeCategory = function(idx) {
   });
   categories.splice(idx,1);
   drawCategoryManager();
-  drawEditTable();
-  drawLegend();
 };
+
+// --- Tableau d'édition ---
+let editIndex = null; // ligne en édition
+
+function drawStakeholderTable() {
+  let html = `
+    <h3>Parties prenantes</h3>
+    <table class="edit-table">
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Nom</th>
+          <th>Dépendance</th>
+          <th>Pénétration</th>
+          <th>Maturité SSI</th>
+          <th>Confiance</th>
+          <th>Niveau de menace</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  stakeholders.forEach((s, index) => {
+    const isEditing = index === editIndex;
+    html += `<tr>`;
+
+    if (isEditing) {
+      html += `
+        <td>
+          <select id="cat-${index}">
+            ${categories.map(c => `<option value="${c.name}" ${c.name === s.category ? 'selected' : ''}>${c.name}</option>`).join('')}
+          </select>
+        </td>
+        <td><input id="label-${index}" type="text" value="${s.label}"></td>
+        <td><input id="dep-${index}" type="number" min="1" max="4" value="${s.dep}"></td>
+        <td><input id="pen-${index}" type="number" min="1" max="4" value="${s.pen}"></td>
+        <td><input id="mat-${index}" type="number" min="1" max="4" value="${s.mat}"></td>
+        <td><input id="conf-${index}" type="number" min="1" max="4" value="${s.conf}"></td>
+        <td>${s.menace.toFixed(2)}</td>
+        <td>
+          <button class="btn btn-small" onclick="saveStakeholder(${index})">💾</button>
+          <button class="btn btn-small btn-danger" onclick="cancelEdit()">✖️</button>
+        </td>
+      `;
+    } else {
+      html += `
+        <td>
+            <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${(categories.find(c => c.name === s.category) || {}).color || '#ccc'}; margin-right:6px;"></span>
+            ${s.category}
+        </td>
+        <td>${s.label}</td>
+        <td>${s.dep}</td>
+        <td>${s.pen}</td>
+        <td>${s.mat}</td>
+        <td>${s.conf}</td>
+        <td>${s.menace.toFixed(2)}</td>
+        <td>
+          <button class="btn btn-small" onclick="editStakeholder(${index})">✏️</button>
+          <button class="btn btn-small btn-danger" onclick="deleteStakeholder(${index})">🗑️</button>
+        </td>
+      `;
+    }
+
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table>
+  <button onclick="addStakeholder()">➕ Ajouter</button>
+`;
+  document.getElementById('edit-table').innerHTML = html;
+
+  // Remplir les options du formulaire d’ajout
+  const select = document.getElementById('new-category');
+  if (select && select.options.length === 0) {
+    categories.forEach(c => {
+      const option = document.createElement('option');
+      option.value = c.name;
+      option.textContent = c.name;
+      select.appendChild(option);
+    });
+  }
+}
+
+function editStakeholder(index) {
+  editIndex = index;
+  drawStakeholderTable();
+}
+
+function cancelEdit() {
+  editIndex = null;
+  drawStakeholderTable();
+}
+
+function saveStakeholder(index) {
+  const updated = {
+    category: document.getElementById(`cat-${index}`).value,
+    label: document.getElementById(`label-${index}`).value,
+    dep: parseInt(document.getElementById(`dep-${index}`).value),
+    pen: parseInt(document.getElementById(`pen-${index}`).value),
+    mat: parseInt(document.getElementById(`mat-${index}`).value),
+    conf: parseInt(document.getElementById(`conf-${index}`).value),
+    angle: stakeholders[index].angle ?? (Math.random() * 2 * Math.PI),
+  };
+  updated.menace = Math.max(menaceMin, Math.min(menaceMax, (updated.dep * updated.pen) / (updated.mat * updated.conf)));
+  stakeholders[index] = updated;
+  updateRadii();
+  drawMap();
+  editIndex = null;
+  drawStakeholderTable();
+}
+
+
+
+function deleteStakeholder(index) {
+  if (confirm("Supprimer cette partie prenante ?")) {
+    stakeholders.splice(index, 1);
+    updateRadii();
+    drawMap();
+    drawStakeholderTable();
+  }
+}
+
+function addStakeholder() {
+  const emptyStakeholder = {
+    category: '',
+    label: '',
+    dep: 1,
+    pen: 1,
+    mat: 1,
+    conf: 1,
+    menace: 1,
+    angle: Math.random() * 2 * Math.PI
+  };
+
+  stakeholders.push(emptyStakeholder);
+  editIndex = stakeholders.length - 1;  // Mise en édition directe de la nouvelle ligne
+  updateRadii();
+  drawMap();
+  drawStakeholderTable();
+
+  // Scroll vers la nouvelle ligne (optionnel)
+  setTimeout(() => {
+    const lastRow = document.querySelector('#stakeholder-table tbody tr:last-child input');
+    if (lastRow) lastRow.focus();
+  }, 50);
+}
+
 
 // --- Gestion des zones de risque dynamiques ---
 function drawRiskZoneManager() {
@@ -407,132 +544,32 @@ function drawRiskZoneManager() {
   });
 }
 
-// --- Tableau d'édition ---
-function drawEditTable() {
-  let editHTML = `
-    <form id="edit-form">
-    <table class="edit-table">
-      <thead>
-        <tr>
-          <th>Catégorie</th>
-          <th>Nom</th>
-          <th>Dépendance</th>
-          <th>Pénétration</th>
-          <th>Maturité SSI</th>
-          <th>Confiance</th>
-          <th>Niveau de menace</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-  stakeholders.forEach((s, idx) => {
-    editHTML += `
-      <tr>
-        <td>
-          <select name="cat-${idx}">
-            ${categories.map(cat => `<option value="${cat.name}" ${cat.name===s.category?'selected':''}>${cat.name}</option>`).join('')}
-          </select>
-        </td>
-        <td><input type="text" name="label-${idx}" value="${s.label}" /></td>
-        <td><input type="number" min="1" max="5" name="dep-${idx}" value="${s.dep}" /></td>
-        <td><input type="number" min="1" max="5" name="pen-${idx}" value="${s.pen}" /></td>
-        <td><input type="number" min="1" max="5" name="mat-${idx}" value="${s.mat}" /></td>
-        <td><input type="number" min="1" max="5" name="conf-${idx}" value="${s.conf}" /></td>
-        <td><input type="number" step="0.01" min="0" max="5" name="menace-${idx}" value="${s.menace}" /></td>
-        <td><button type="button" class="btn btn-small btn-danger" onclick="removeStakeholder(${idx})">Suppr.</button></td>
-      </tr>
-    `;
-  });
-  editHTML += `
-      </tbody>
-    </table>
-    <button type="button" class="btn add-row-btn" onclick="addStakeholder()">Ajouter une partie prenante</button>
-    <button type="submit" class="btn" style="float:right;">Valider</button>
-    </form>
-  `;
-  document.getElementById('edit-table').innerHTML = editHTML;
-
-  // Validation du formulaire
-  document.getElementById('edit-form').onsubmit = function(e) {
-    e.preventDefault();
-    let form = e.target;
-    stakeholders.forEach((s, idx) => {
-      s.category = form[`cat-${idx}`].value;
-      s.label = form[`label-${idx}`].value;
-      s.dep = parseInt(form[`dep-${idx}`].value) || 1;
-      s.pen = parseInt(form[`pen-${idx}`].value) || 1;
-      s.mat = parseInt(form[`mat-${idx}`].value) || 1;
-      s.conf = parseInt(form[`conf-${idx}`].value) || 1;
-      let menace = parseFloat(form[`menace-${idx}`].value.replace(',','.'));
-      s.menace = isNaN(menace) ? s.menace : Math.max(menaceMin, Math.min(menaceMax, menace));
-    });
-    updateRadii();
-    drawMap();
-    drawLegend();
-    drawEditTable();
-  };
-}
-window.addStakeholder = function() {
-  stakeholders.push({
-    category: categories[0].name,
-    label: "Nouvelle partie prenante",
-    dep: 1, pen: 1, mat: 1, conf: 1, menace: 1.00,
-    angle: Math.random()*2*Math.PI
-  });
-  drawEditTable();
-};
-window.removeStakeholder = function(idx) {
-  stakeholders.splice(idx,1);
-  drawEditTable();
-};
-
 // --- Initialisation ---
 function init() {
   updateRadii();
   drawMap();
-  drawLegend();
   drawCategoryManager();
-  drawEditTable();
+  drawStakeholderTable();
   drawRiskZoneManager();
 }
 init();
 
-// --- Drag & drop parties prenantes adapté à l'échelle ---
-let dragging = null;
-canvas.addEventListener('mousedown', function(e) {
-  const rect = canvas.getBoundingClientRect();
-  // Correction pour l'échelle
-  const mx = (e.clientX - rect.left - center.x) / currentScale + center.x;
-  const my = (e.clientY - rect.top  - center.y) / currentScale + center.y;
-  stakeholders.forEach((s, i) => {
-    const x = center.x + s.radius * Math.cos(s.angle);
-    const y = center.y + s.radius * Math.sin(s.angle);
-    const pointRadius = getPointRadius(s.menace);
-    if (Math.hypot(mx - x, my - y) < pointRadius + 5) dragging = i;
+  // Gestion des onglets
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+
+      btn.classList.add('active');
+      const tabId = btn.getAttribute('data-tab');
+      document.getElementById(tabId).style.display = 'block';
+    });
   });
-});
-canvas.addEventListener('mousemove', function(e) {
-  if (dragging !== null) {
-    const rect = canvas.getBoundingClientRect();
-    // Correction pour l'échelle
-    const mx = (e.clientX - rect.left - center.x) / currentScale + center.x;
-    const my = (e.clientY - rect.top  - center.y) / currentScale + center.y;
-    const dx = mx - center.x, dy = my - center.y;
-    stakeholders[dragging].angle = Math.atan2(dy, dx);
-    let r = Math.hypot(dx, dy);
-    // Rayon borné par les zones de risque
-    const radiusMin = Math.min(...riskZones.map(z => z.radius));
-    const radiusMax = Math.max(...riskZones.map(z => z.radius));
-    r = Math.max(radiusMin, Math.min(radiusMax, r));
-    stakeholders[dragging].radius = r;
-    drawMap();
-    drawLegend();
-    drawEditTable();
-  }
-});
-canvas.addEventListener('mouseup', function() { dragging = null; });
-canvas.addEventListener('mouseleave', function() { dragging = null; });
+
+  // Affichage par défaut : onglet "Édition"
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelector('.tab-btn[data-tab="edit-table"]').click();
+  });
 </script>
 </body>
 </html>
